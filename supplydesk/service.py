@@ -2,6 +2,17 @@
 
 from supplydesk.storage import JsonStore
 
+CUSTOMER_TYPES = ("regular", "student")
+FULFILLMENT_OPTIONS = ("pickup", "delivery")
+MIN_QUANTITY = 1
+MAX_QUANTITY = 99
+STUDENT_DISCOUNT_THRESHOLD_CENTS = 5000
+STUDENT_DISCOUNT_PERCENT = 10
+DELIVERY_FEE_CENTS = 600
+FREE_DELIVERY_THRESHOLD_CENTS = 10000
+ORDER_ID_PREFIX = "ORD-"
+ORDER_NUMBER_DIGITS = 4
+
 
 class OrderService:
     def __init__(self, state_path=".supplydesk/state.json"):
@@ -12,9 +23,9 @@ class OrderService:
 
     def quote(self, customer_type, items, fulfillment="pickup"):
         state = self.store.load()
-        if customer_type not in ("regular", "student"):
+        if customer_type not in CUSTOMER_TYPES:
             raise ValueError("Customer type must be regular or student.")
-        if fulfillment not in ("pickup", "delivery"):
+        if fulfillment not in FULFILLMENT_OPTIONS:
             raise ValueError("Fulfillment must be pickup or delivery.")
         if not isinstance(items, list) or not items:
             raise ValueError("An order must contain at least one item.")
@@ -31,7 +42,7 @@ class OrderService:
             if product is None:
                 raise ValueError("Unknown product.")
             quantity = item.get("quantity")
-            if type(quantity) is not int or quantity < 1 or quantity > 99:
+            if type(quantity) is not int or quantity < MIN_QUANTITY or quantity > MAX_QUANTITY:
                 raise ValueError("Quantity must be an integer from 1 to 99.")
             if quantity > product["stock"]:
                 raise ValueError("Not enough stock for " + product["product_id"] + ".")
@@ -45,11 +56,11 @@ class OrderService:
                 "line_total_cents": line_total,
             })
         discount = 0
-        if customer_type == "student" and subtotal > 5000:
-            discount = (subtotal * 10 + 50) // 100
+        if customer_type == "student" and subtotal > STUDENT_DISCOUNT_THRESHOLD_CENTS:
+            discount = (subtotal * STUDENT_DISCOUNT_PERCENT + 50) // 100  # round half up
         delivery = 0
-        if fulfillment == "delivery" and subtotal - discount < 10000:
-            delivery = 600
+        if fulfillment == "delivery" and subtotal - discount < FREE_DELIVERY_THRESHOLD_CENTS:
+            delivery = DELIVERY_FEE_CENTS
         return {
             "customer_type": customer_type,
             "fulfillment": fulfillment,
@@ -62,9 +73,9 @@ class OrderService:
 
     def place_order(self, customer_type, items, fulfillment="pickup"):
         state = self.store.load()
-        if customer_type not in ("regular", "student"):
+        if customer_type not in CUSTOMER_TYPES:
             raise ValueError("Customer type must be regular or student.")
-        if fulfillment not in ("pickup", "delivery"):
+        if fulfillment not in FULFILLMENT_OPTIONS:
             raise ValueError("Fulfillment must be pickup or delivery.")
         if not isinstance(items, list) or not items:
             raise ValueError("An order must contain at least one item.")
@@ -81,7 +92,7 @@ class OrderService:
             if product is None:
                 raise ValueError("Unknown product.")
             quantity = item.get("quantity")
-            if type(quantity) is not int or quantity < 1 or quantity > 99:
+            if type(quantity) is not int or quantity < MIN_QUANTITY or quantity > MAX_QUANTITY:
                 raise ValueError("Quantity must be an integer from 1 to 99.")
             if quantity > product["stock"]:
                 raise ValueError("Not enough stock for " + product["product_id"] + ".")
@@ -95,13 +106,13 @@ class OrderService:
                 "line_total_cents": line_total,
             })
         discount = 0
-        if customer_type == "student" and subtotal > 5000:
-            discount = (subtotal * 10 + 50) // 100
+        if customer_type == "student" and subtotal > STUDENT_DISCOUNT_THRESHOLD_CENTS:
+            discount = (subtotal * STUDENT_DISCOUNT_PERCENT + 50) // 100  # round half up
         delivery = 0
-        if fulfillment == "delivery" and subtotal - discount < 10000:
-            delivery = 600
+        if fulfillment == "delivery" and subtotal - discount < FREE_DELIVERY_THRESHOLD_CENTS:
+            delivery = DELIVERY_FEE_CENTS
         order = {
-            "order_id": "ORD-" + str(state["next_order_number"]).zfill(4),
+            "order_id": ORDER_ID_PREFIX + str(state["next_order_number"]).zfill(ORDER_NUMBER_DIGITS),
             "status": "placed",
             "customer_type": customer_type,
             "fulfillment": fulfillment,
