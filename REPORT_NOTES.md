@@ -63,7 +63,31 @@ After each refactoring the result was identical to the baseline: **36 pass, the 
 Commit `44a0747`. These intentionally change behaviour to match the spec: `>=` for the discount threshold, a combined-quantity stock check, and an idempotent cancel.
 Result: **39/39 pass** (`evidence/05_after_defect_fixes.txt`). A manual CLI check also passed: student `notebook:10` gives discount 500, and `place --item bag:3 --item bag:2` gives exit 2.
 
+## Task 5 – CR-01 Express Delivery
+
+**Part A:** see [`CR-01_prediction.md`](CR-01_prediction.md). It was committed in `6716071`, *before* any CR-01 code (AI-drafted, so disclose it in Task 6).
+
+**Part B:** commit `cf91a9a`.
+- 14 new tests in [`tests/test_cr01_express.py`](tests/test_cr01_express.py) cover the three CR-01 examples, a fee that is never waived (even at $100), unchanged discount rules, quote == order, reopen/cancel keeping fulfillment and totals, numbering and stock, other values still invalid, the CLI example (`total_cents` 8400), CLI help, the default pickup, and the menu prompt.
+- Before implementation: 11 of the 14 failed (`evidence/06_...txt`). After implementation: **53/53 pass** (`evidence/07_after_cr01.txt`).
+
+**Part C, prediction vs actual:**
+
+| Predicted | Actual | Correct? |
+|---|---|---|
+| `service.py` constants, `_validate_options` message, `_calculate_totals` | Same, except the fee logic went into a new small helper `_delivery_fee()` called from `_calculate_totals` (17 lines changed) | Mostly. The extra helper was not predicted |
+| `quote()`, `place_order()`, `cancel_order()` unchanged | Unchanged | Yes |
+| `cli.py` `build_parser()` choices | Changed, and it now **imports** `FULFILLMENT_OPTIONS`/`CUSTOMER_TYPES` from the service instead of keeping a second hard-coded copy, plus help text | Partly. Removing the duplicated list was not foreseen |
+| `menu.py` `read_request()` prompt | One line changed | Yes |
+| README / spec | Both updated. The README test section also changed (4 → 53 tests) | Yes, plus that extra |
+| No existing tests need updating | 0 lines changed in `test_smoke.py` / `test_safety_net.py` | Yes |
+
+**Did the refactoring help? Yes, clearly.**
+- Before refactoring 2, the delivery-fee `if` existed in *both* `quote()` and `place_order()`, so express would have had to be added twice, risking a quote/order mismatch. That mismatch is exactly what CR-01 requirement 5 forbids.
+- After refactoring, it was added once, in `_calculate_totals`/`_delivery_fee`.
+- The named constants (refactoring 1) made the new fee a one-line constant, `EXPRESS_DELIVERY_FEE_CENTS`.
+- One thing the refactoring did *not* cover: the CLI kept its own copy of the option list, which had to be found and fixed separately.
+
 ## Still to do
-- **Task 5:** wait for CR-01 from MyCourseLink. Write the Part A prediction *before* implementing it.
 - **Task 6:** choose 3 AI recommendations from this session, using at least 2 of ACCEPT / MODIFY / REJECT, and export the transcript as the AI-use record.
 - **Repo:** create your own **public** GitHub repo and push. `origin` currently points at the instructor's repo.
