@@ -40,7 +40,12 @@ class OrderService:
     def _price_request(self, state, customer_type, items, fulfillment):
         """Validate a request against current stock and return its priced lines and totals."""
         self._validate_options(customer_type, fulfillment, items)
-        lines = [self._build_line(state, item) for item in items]
+        lines = []
+        requested = {}  # combined quantity per product across repeated lines
+        for item in items:
+            line = self._build_line(state, item, requested)
+            requested[line["product_id"]] = requested.get(line["product_id"], 0) + line["quantity"]
+            lines.append(line)
         return {
             "customer_type": customer_type,
             "fulfillment": fulfillment,
@@ -57,8 +62,12 @@ class OrderService:
         if not isinstance(items, list) or not items:
             raise ValueError("An order must contain at least one item.")
 
-    def _build_line(self, state, item):
-        """Validate one requested item and return its priced order line."""
+    def _build_line(self, state, item, requested):
+        """Validate one requested item and return its priced order line.
+
+        ``requested`` holds quantities already requested on earlier lines, so a
+        product repeated on several lines cannot exceed its stock in total.
+        """
         if not isinstance(item, dict):
             raise ValueError("Each item must contain a product_id and quantity.")
         product = self._find_product(state, item.get("product_id"))
@@ -67,7 +76,7 @@ class OrderService:
         quantity = item.get("quantity")
         if type(quantity) is not int or quantity < MIN_QUANTITY or quantity > MAX_QUANTITY:
             raise ValueError("Quantity must be an integer from 1 to 99.")
-        if quantity > product["stock"]:
+        if quantity + requested.get(product["product_id"], 0) > product["stock"]:
             raise ValueError("Not enough stock for " + product["product_id"] + ".")
         return {
             "product_id": product["product_id"],
@@ -81,7 +90,7 @@ class OrderService:
     def _calculate_totals(customer_type, fulfillment, lines):
         subtotal = sum(line["line_total_cents"] for line in lines)
         discount = 0
-        if customer_type == "student" and subtotal > STUDENT_DISCOUNT_THRESHOLD_CENTS:
+        if customer_type == "student" and subtotal >= STUDENT_DISCOUNT_THRESHOLD_CENTS:
             discount = (subtotal * STUDENT_DISCOUNT_PERCENT + 50) // 100  # round half up
         delivery = 0
         if fulfillment == "delivery" and subtotal - discount < FREE_DELIVERY_THRESHOLD_CENTS:
@@ -132,6 +141,8 @@ class OrderService:
                 break
         if order is None:
             raise ValueError("Unknown order: " + order_id)
+        if order["status"] == "cancelled":
+            return order  # already cancelled: do not restore stock again
         self._adjust_stock(state, order["items"], +1)
         order["status"] = "cancelled"
         self.store.save(state)
