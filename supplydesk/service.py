@@ -28,57 +28,58 @@ class OrderService:
     def place_order(self, customer_type, items, fulfillment="pickup"):
         state = self.store.load()
         priced = self._price_request(state, customer_type, items, fulfillment)
-        order = {
-            "order_id": ORDER_ID_PREFIX + str(state["next_order_number"]).zfill(ORDER_NUMBER_DIGITS),
-            "status": "placed",
-            **priced,
-        }
-        for line in priced["items"]:
-            for product in state["catalog"]:
-                if product["product_id"] == line["product_id"]:
-                    product["stock"] -= line["quantity"]
+        order = {"order_id": self._next_order_id(state), "status": "placed", **priced}
+        self._adjust_stock(state, order["items"], -1)
         state["next_order_number"] += 1
         state["orders"].append(order)
         self.store.save(state)
         return order
 
-    def _price_request(self, state, customer_type, items, fulfillment):
-        """Validate a request against current stock and return its priced lines and totals.
+    # ----- request validation and pricing (shared by quote and place_order) -----
 
-        Shared by quote() and place_order() so both always apply identical rules.
-        """
+    def _price_request(self, state, customer_type, items, fulfillment):
+        """Validate a request against current stock and return its priced lines and totals."""
+        self._validate_options(customer_type, fulfillment, items)
+        lines = [self._build_line(state, item) for item in items]
+        return {
+            "customer_type": customer_type,
+            "fulfillment": fulfillment,
+            "items": lines,
+            **self._calculate_totals(customer_type, fulfillment, lines),
+        }
+
+    @staticmethod
+    def _validate_options(customer_type, fulfillment, items):
         if customer_type not in CUSTOMER_TYPES:
             raise ValueError("Customer type must be regular or student.")
         if fulfillment not in FULFILLMENT_OPTIONS:
             raise ValueError("Fulfillment must be pickup or delivery.")
         if not isinstance(items, list) or not items:
             raise ValueError("An order must contain at least one item.")
-        lines = []
-        subtotal = 0
-        for item in items:
-            if not isinstance(item, dict):
-                raise ValueError("Each item must contain a product_id and quantity.")
-            product = None
-            for candidate in state["catalog"]:
-                if candidate["product_id"] == item.get("product_id"):
-                    product = candidate
-                    break
-            if product is None:
-                raise ValueError("Unknown product.")
-            quantity = item.get("quantity")
-            if type(quantity) is not int or quantity < MIN_QUANTITY or quantity > MAX_QUANTITY:
-                raise ValueError("Quantity must be an integer from 1 to 99.")
-            if quantity > product["stock"]:
-                raise ValueError("Not enough stock for " + product["product_id"] + ".")
-            line_total = product["unit_price_cents"] * quantity
-            subtotal += line_total
-            lines.append({
-                "product_id": product["product_id"],
-                "name": product["name"],
-                "unit_price_cents": product["unit_price_cents"],
-                "quantity": quantity,
-                "line_total_cents": line_total,
-            })
+
+    def _build_line(self, state, item):
+        """Validate one requested item and return its priced order line."""
+        if not isinstance(item, dict):
+            raise ValueError("Each item must contain a product_id and quantity.")
+        product = self._find_product(state, item.get("product_id"))
+        if product is None:
+            raise ValueError("Unknown product.")
+        quantity = item.get("quantity")
+        if type(quantity) is not int or quantity < MIN_QUANTITY or quantity > MAX_QUANTITY:
+            raise ValueError("Quantity must be an integer from 1 to 99.")
+        if quantity > product["stock"]:
+            raise ValueError("Not enough stock for " + product["product_id"] + ".")
+        return {
+            "product_id": product["product_id"],
+            "name": product["name"],
+            "unit_price_cents": product["unit_price_cents"],
+            "quantity": quantity,
+            "line_total_cents": product["unit_price_cents"] * quantity,
+        }
+
+    @staticmethod
+    def _calculate_totals(customer_type, fulfillment, lines):
+        subtotal = sum(line["line_total_cents"] for line in lines)
         discount = 0
         if customer_type == "student" and subtotal > STUDENT_DISCOUNT_THRESHOLD_CENTS:
             discount = (subtotal * STUDENT_DISCOUNT_PERCENT + 50) // 100  # round half up
@@ -86,14 +87,31 @@ class OrderService:
         if fulfillment == "delivery" and subtotal - discount < FREE_DELIVERY_THRESHOLD_CENTS:
             delivery = DELIVERY_FEE_CENTS
         return {
-            "customer_type": customer_type,
-            "fulfillment": fulfillment,
-            "items": lines,
             "subtotal_cents": subtotal,
             "discount_cents": discount,
             "delivery_cents": delivery,
             "total_cents": subtotal - discount + delivery,
         }
+
+    # ----- small state helpers -----
+
+    @staticmethod
+    def _find_product(state, product_id):
+        for product in state["catalog"]:
+            if product["product_id"] == product_id:
+                return product
+        return None
+
+    @staticmethod
+    def _next_order_id(state):
+        return ORDER_ID_PREFIX + str(state["next_order_number"]).zfill(ORDER_NUMBER_DIGITS)
+
+    def _adjust_stock(self, state, lines, direction):
+        """Add (direction=+1) or remove (direction=-1) each line's quantity from stock."""
+        for line in lines:
+            product = self._find_product(state, line["product_id"])
+            if product is not None:
+                product["stock"] += direction * line["quantity"]
 
     def list_orders(self):
         return self.store.load()["orders"]
@@ -114,10 +132,7 @@ class OrderService:
                 break
         if order is None:
             raise ValueError("Unknown order: " + order_id)
-        for line in order["items"]:
-            for product in state["catalog"]:
-                if product["product_id"] == line["product_id"]:
-                    product["stock"] += line["quantity"]
+        self._adjust_stock(state, order["items"], +1)
         order["status"] = "cancelled"
         self.store.save(state)
         return order
