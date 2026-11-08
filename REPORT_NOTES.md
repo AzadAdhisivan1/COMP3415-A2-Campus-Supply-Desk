@@ -88,6 +88,12 @@ Result: **39/39 pass** (`evidence/05_after_defect_fixes.txt`). A manual CLI chec
 - The named constants (refactoring 1) made the new fee a one-line constant, `EXPRESS_DELIVERY_FEE_CENTS`.
 - One thing the refactoring did *not* cover: the CLI kept its own copy of the option list, which had to be found and fixed separately.
 
-## Still to do
-- **Task 6:** choose 3 AI recommendations from this session, using at least 2 of ACCEPT / MODIFY / REJECT, and export the transcript as the AI-use record.
-- **Repo:** create your own **public** GitHub repo and push. `origin` currently points at the instructor's repo.
+## Task 6 – AI engineering judgment
+
+| Recommendation | Decision | Evidence |
+|---|---|---|
+| Fix defects in a separate commit after the refactorings, and keep `> 5000` unchanged during refactoring | ACCEPT | Refactoring commits give 36/3 (evidence/02–04), the fix commit gives 39/39 (05) |
+| AI-written CLI help test used private argparse attributes | MODIFY | Now uses the public `quote --help` output (commit `e856c1f`, evidence/09) |
+| Replace `type(quantity) is not int` with `isinstance` (pylint C0123) | REJECT | Experiment: `True` accepted, test fails (evidence/08). Reverted and added a comment |
+
+The final report PDF is submitted through MyCourseLink, not kept in this repository.
