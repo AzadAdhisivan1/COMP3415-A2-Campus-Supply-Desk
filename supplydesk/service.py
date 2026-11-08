@@ -3,13 +3,14 @@
 from supplydesk.storage import JsonStore
 
 CUSTOMER_TYPES = ("regular", "student")
-FULFILLMENT_OPTIONS = ("pickup", "delivery")
+FULFILLMENT_OPTIONS = ("pickup", "delivery", "express")
 MIN_QUANTITY = 1
 MAX_QUANTITY = 99
 STUDENT_DISCOUNT_THRESHOLD_CENTS = 5000
 STUDENT_DISCOUNT_PERCENT = 10
 DELIVERY_FEE_CENTS = 600
 FREE_DELIVERY_THRESHOLD_CENTS = 10000
+EXPRESS_DELIVERY_FEE_CENTS = 1200  # CR-01: flat fee, never waived
 ORDER_ID_PREFIX = "ORD-"
 ORDER_NUMBER_DIGITS = 4
 
@@ -58,7 +59,7 @@ class OrderService:
         if customer_type not in CUSTOMER_TYPES:
             raise ValueError("Customer type must be regular or student.")
         if fulfillment not in FULFILLMENT_OPTIONS:
-            raise ValueError("Fulfillment must be pickup or delivery.")
+            raise ValueError("Fulfillment must be pickup, delivery, or express.")
         if not isinstance(items, list) or not items:
             raise ValueError("An order must contain at least one item.")
 
@@ -92,15 +93,21 @@ class OrderService:
         discount = 0
         if customer_type == "student" and subtotal >= STUDENT_DISCOUNT_THRESHOLD_CENTS:
             discount = (subtotal * STUDENT_DISCOUNT_PERCENT + 50) // 100  # round half up
-        delivery = 0
-        if fulfillment == "delivery" and subtotal - discount < FREE_DELIVERY_THRESHOLD_CENTS:
-            delivery = DELIVERY_FEE_CENTS
+        delivery = OrderService._delivery_fee(fulfillment, subtotal - discount)
         return {
             "subtotal_cents": subtotal,
             "discount_cents": discount,
             "delivery_cents": delivery,
             "total_cents": subtotal - discount + delivery,
         }
+
+    @staticmethod
+    def _delivery_fee(fulfillment, merchandise_after_discount):
+        if fulfillment == "express":
+            return EXPRESS_DELIVERY_FEE_CENTS
+        if fulfillment == "delivery" and merchandise_after_discount < FREE_DELIVERY_THRESHOLD_CENTS:
+            return DELIVERY_FEE_CENTS
+        return 0
 
     # ----- small state helpers -----
 

@@ -60,6 +60,7 @@ You should see:
 Type an option number and press Enter. The program will guide you through the remaining steps.
 
 - Prices are displayed in Canadian dollars.
+- Fulfillment options: `pickup` (free, default), `delivery` ($6.00, free from $100 after discount), and `express` ($12.00, never waived).
 - Quotes do not create orders or reserve stock.
 - Placement and cancellation require confirmation.
 - Choose `0` to exit. You can also press `Ctrl+C`.
@@ -81,7 +82,7 @@ Then:
 3. Enter `notebook` for the product ID.
 4. Enter `2` for the quantity.
 5. Press Enter without typing another product ID to finish adding items.
-6. Press Enter at the fulfillment prompt to use `pickup`.
+6. Press Enter at the fulfillment prompt to use `pickup` (other options: `delivery`, `express`).
 
 With sufficient stock available, the quote should show a **$10.00 total**.
 
@@ -95,15 +96,19 @@ From the folder containing `README.md`, `supplydesk`, and `tests`, run:
 python -m unittest discover -s tests -v
 ```
 
-The supplied tests should finish with:
+The full suite should finish with:
 
 ```text
-Ran 4 tests
+Ran 53 tests
 
 OK
 ```
 
-These four tests are a starting point. **Passing them does not mean every required behavior is correct.** You will add meaningful tests as part of the assignment.
+- `tests/test_smoke.py`: the 4 original starter tests.
+- `tests/test_safety_net.py`: Task 2 safety-net tests (normal, boundary, invalid, preserved behaviour, menu/CLI).
+- `tests/test_cr01_express.py`: CR-01 express delivery acceptance tests.
+
+Saved test runs for each stage (baseline, after each refactoring, after defect fixes, after CR-01) are in `evidence/`.
 
 The supplied tests use temporary files and do not change your saved orders or stock.
 
@@ -172,6 +177,7 @@ You can perform operations directly instead of using the menu. These commands ar
 python -m supplydesk catalog
 python -m supplydesk quote --customer regular --item notebook:2
 python -m supplydesk quote --customer student --fulfillment delivery --item hoodie:2
+python -m supplydesk quote --customer student --fulfillment express --item hoodie:2
 ```
 
 Use repeated `--item` options for multiple items:
