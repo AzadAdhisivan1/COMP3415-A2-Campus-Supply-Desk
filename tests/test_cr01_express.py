@@ -93,8 +93,12 @@ class ExpressInterfaceTests(ServiceTestCase):
         self.assertEqual(json.loads(out)["total_cents"], 8400)
 
     def test_cli_help_lists_express(self):
-        help_text = cli.build_parser()._subparsers._group_actions[0].choices["quote"].format_help()
-        self.assertIn("express", help_text)
+        # Uses the public "quote --help" output (argparse prints help, then exits 0).
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as exit_info:
+            cli.main(["quote", "--help"])
+        self.assertEqual(exit_info.exception.code, 0)
+        self.assertIn("express", out.getvalue())
 
     def test_cli_default_fulfillment_still_pickup(self):
         status, out, _ = self.run_cli("quote", "--item", "notebook:2")

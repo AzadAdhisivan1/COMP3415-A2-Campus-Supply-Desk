@@ -75,6 +75,7 @@ class OrderService:
         if product is None:
             raise ValueError("Unknown product.")
         quantity = item.get("quantity")
+        # Exact type check on purpose: isinstance() would accept True/False (bool is an int subclass).
         if type(quantity) is not int or quantity < MIN_QUANTITY or quantity > MAX_QUANTITY:
             raise ValueError("Quantity must be an integer from 1 to 99.")
         if quantity + requested.get(product["product_id"], 0) > product["stock"]:
